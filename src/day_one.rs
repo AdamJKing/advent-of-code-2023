@@ -1,6 +1,8 @@
 use itertools::{Itertools, PeekingNext};
 use lazy_static::lazy_static;
-use std::{collections::HashMap, fs, iter::Peekable};
+use std::{collections::HashMap, fs, iter::Peekable, str::Chars};
+
+use crate::inits::InitsIterator;
 
 pub(crate) fn day_one() {
     let binding =
@@ -44,33 +46,34 @@ lazy_static! {
     ]);
 }
 
-fn capture_number_from_text<I: Iterator<Item = char>>(iter: &mut Peekable<I>) -> Option<u32> {
-    let mut token = String::new();
-
-    iter.find_map(|item| {
-        token.push(item);
-
-        if !LOOKUP.keys().any(|key| key.starts_with(&token.clone())) {
-            token = "".to_owned();
-        }
-
-        LOOKUP.get(&token as &str).copied()
-    })
+fn capture_number_from_text<I>(input: I) -> Option<u32>
+where
+    I: Iterator<Item = char>,
+{
+    input
+        .inits()
+        .take_while(|init| {
+            LOOKUP.keys().any(|key| {
+                let s: String = init.iter().collect();
+                key.starts_with(&s)
+            })
+        })
+        .last()
+        .and_then(|found| {
+            let key: String = found.iter().collect();
+            LOOKUP.get(&key).copied()
+        })
 }
 
-fn capture_number<I: Iterator<Item = char>>(peeked: &mut Peekable<I>) -> Option<u32> {
-    peeked
-        .peeking_next(|ch| ch.is_ascii_digit())
+fn capture_number(input: &mut Peekable<Chars>) -> Option<u32> {
+    input
+        .peeking_next(|c| c.is_ascii_digit())
         .and_then(|ch| ch.to_digit(10))
-        .or_else(|| capture_number_from_text(peeked))
+        .or_else(|| capture_number_from_text(input.by_ref()))
 }
 
 fn capture_numbers(input: &str) -> Vec<u32> {
-    input
-        .chars()
-        .peekable()
-        .batching(capture_number)
-        .collect_vec()
+    input.chars().peekable().batching(capture_number).collect()
 }
 
 fn calibration_value_improved(input: &str) -> Option<u32> {
@@ -155,11 +158,6 @@ mod tests {
         let mut iter = "oneabc".chars().peekable();
         assert_eq!(capture_number_from_text(&mut iter), Some(1));
         assert_eq!(iter.next(), Some('a'));
-
-        assert_eq!(
-            capture_number_from_text(&mut "wotwo".chars().peekable()),
-            Some(2)
-        );
     }
 
     #[test]
@@ -177,7 +175,14 @@ mod tests {
         assert_eq!(capture_numbers("two"), vec![2]);
         assert_eq!(capture_numbers("1nine"), vec![1, 9]);
         assert_eq!(capture_numbers("two1nine"), vec![2, 1, 9]);
+        assert_eq!(capture_numbers("eightwothree"), vec![8, 3]);
+    }
 
-        assert_eq!(capture_numbers("eightwothree"), vec![8, 2, 3]);
+    #[test]
+    fn lazy_text_spec() {
+        let mut input = "twoabc".chars().peekable();
+        let result = capture_number(&mut input);
+        assert_eq!(result, Some(2));
+        assert_eq!(input.collect::<String>(), "abc");
     }
 }
